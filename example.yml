@@ -1,0 +1,61 @@
+---
+
+# commented out attributes are exposed as a local but _not_ configurable as a var; if provided throw a WARN
+
+services:
+  web:
+    task: ping-pong
+    capacity_provider: # cluster default || FARGATE || FARGATE_SPOT
+    task_count: 1
+    task_min_healthy: 100
+    task_max_healthy: 200
+    # propogate_tags_from: task definitiopns
+    # enable ECS managed tags: yes
+    subnets: # internal or private please. private needed for CW logs
+    security_groups: default
+  worker:
+    task: sidekiq
+  fluentd:
+    task: fluentd
+
+tasks: # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html
+  ping-pong:
+    task-role: # IAM role task runs under. empty to use namespace default
+    #execution-role: # for pulling from ECR + sending logs to cloudwatch. provide @ namespace
+    memory: 0.5
+    cpu: 0.25
+    containers:
+      - name: ping-pong
+        image: briceburg/ping-pong
+        ports:
+          - description: public frontend
+            port: 80
+            protocol: tcp
+            lb:
+              associations:  # skip if task is not also registered as a service
+                public:
+                  hostname: # if set, make dns entry if in apex zone / not a FQDN?
+                  paths: ["/*"]
+              healthcheck:
+                - traffic port
+                - status [#NLB or ALB]
+        docker-labels: #k/v pair of additional labels
+        environment: #k/v pair
+        # logs: # we do not need to expose this config
+        #   awslogs-group: from-namespace
+        #   awslogs-region: from-namespace 
+        #   awslogs-stream-prefix: service-id (task name)
+        #   awslogs-datetime-format: investigate-later
+  sidekiq:
+    memory: 2
+    cpu : 1
+    containers:
+      - image: ecr.io/rails-sidekiq
+        environment:
+          FOO: bar
+  fluentd:
+    memory: 0.5
+    cpu: 1
+    containers:
+      - image: fluentd
+
