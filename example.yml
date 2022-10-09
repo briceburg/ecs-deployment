@@ -58,4 +58,9 @@ tasks: # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_defini
     cpu: 1
     containers:
       - image: fluentd
+  migration:
+    containers:
+      - image: ruby
+        command/entry: rake db:migrate VERSION=20080906120000
+    
 
