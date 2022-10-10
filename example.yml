@@ -11,12 +11,12 @@ services:
     task_max_healthy: 200
     # propogate_tags_from: task definitiopns
     # enable ECS managed tags: yes
-    subnets: # internal or private please. private needed for CW logs
+    subnets: # internal or private please. requires CW logs endpoint? 
     security_groups: default
   worker:
     task: sidekiq
-  fluentd:
-    task: fluentd
+  mail:
+    task: mailpit
 
 tasks: # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_definition_parameters.html
   ping-pong:
@@ -29,13 +29,15 @@ tasks: # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_defini
         image: briceburg/ping-pong
         ports:
           - description: public frontend
-            port: 80
+            port: 80 # container port
             protocol: tcp
             lb:
               associations:  # skip if task is not also registered as a service
                 public:
                   hostname: # if set, make dns entry if in apex zone / not a FQDN?
                   paths: ["/*"]
+                  port: 443 # lb port
+                  # cert-arn: from namespace
               healthcheck:
                 - traffic port
                 - status [#NLB or ALB]
@@ -53,11 +55,27 @@ tasks: # https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task_defini
       - image: ecr.io/rails-sidekiq
         environment:
           FOO: bar
-  fluentd:
+  mailpit:
     memory: 0.5
-    cpu: 1
+    cpu: 0.25
     containers:
-      - image: fluentd
+      - image: axllent/mailpit
+         ports:
+          - description: web frontend on trusted ALB
+            port: 8025 # container port
+            lb:
+              associations: 
+                trusted:
+                  hostname: mail
+                  port: 443 # lb port
+          - description: incoming SMTP on NLB
+            port: 1025 # container port
+            lb:
+              associations: 
+                nlb:
+                  hostname: smtp
+                  port: 25 # lb port
+
   migration:
     containers:
       - image: ruby
